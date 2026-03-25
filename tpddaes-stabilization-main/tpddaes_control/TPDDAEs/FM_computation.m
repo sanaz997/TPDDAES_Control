@@ -1,0 +1,316 @@
+function [z,g_mz,gg,d_vec]=FM_computation(rddae,M,varargin)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+M_=M+1; 
+num=nargin-2;
+Names = {'gain','Delta','method','slack'};
+len= length(Names);
+opts = [];
+i = 1;
+
+while i <= num
+  arg = varargin{i};
+   if ~isempty(arg)                    
+    flag=1;
+    for j = 1:len
+      if any(strcmp(arg,Names{j})) 
+        val=varargin{i+1};   
+        flag=0;
+      else
+        val=[];
+      end
+      if ~isempty(val)
+        opts.(Names{j}) =  val;
+      end
+    end
+    if flag==1
+         error([' No such field available as: ', num2str(arg)]);
+    end
+
+    end
+  i = i + 2;
+end
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+B=rddae.B;
+C=rddae.C;
+tau_A=rddae.tau_A;
+[d,r]=size(B);
+p=size(C,1);
+tau_s={@(t) 0};
+tau=[tau_A ;tau_s];
+m=length(tau);
+T=rddae.T;
+
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if isfield(opts,'gain')
+     gain=opts.gain;
+     gain1=gain.K;
+else 
+  %%% If no gain is given, the spectral radius of the open-loop system will be calcualted.
+    gain1=zeros(r,p);
+    gain.K=gain1;
+    gain.type='TC';
+end
+if isfield(opts,'Delta')
+  Delta=opts.Delta;
+else 
+    Delta=T;
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if isfield(opts,'slack')
+    slack=opts.slack;
+  [Ap,Bp,NT,Kl,int,K_index,finalP,Matrix,FR_matrix]=deal(slack(1).Ap,slack(1).Bp,slack(1).NT,slack(1).Kl,slack(1).int,slack(1).K_index,slack(1).finalP,slack(1).Matrix,slack(1).FR_matrix);
+ thetaR = cell(1, NT);
+ [thetaR{:}]=deal(slack(1:NT).thetaR);
+else
+ if ~strcmp(gain.type, 'FR')
+    n_FR = [];
+ else
+     n_FR=gain.n_FR;
+end
+
+slack=slack_function(Delta,M,rddae,gain.type,n_FR);
+[Ap,Bp,NT,Kl,int,K_index,finalP,Matrix,FR_matrix]=deal(slack(1).Ap,slack(1).Bp,slack(1).NT,slack(1).Kl,slack(1).int,slack(1).K_index,slack(1).finalP,slack(1).Matrix,slack(1).FR_matrix);
+ thetaR = cell(1, NT);
+ [thetaR{:}]=deal(slack(1:NT).thetaR);
+
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if gain.type=='TC'
+    GC=B*gain1*C;
+    replicated_GC =repmat({GC}, NT, M_-1);
+    [Dvalues{m, 1:M_-1, 1:NT}] = replicated_GC{:};
+
+elseif gain.type=='QR'
+GC=[];
+for i=1:M*NT
+    GC=[GC B*gain1(1:r,1+(i-1)*p:p*i)*C];
+end
+    block_rows = repmat(d, NT*(M),1);     % A vector with NT elements, each of size d
+    GC_rep = mat2cell(GC,d, block_rows);
+    GC_rep=reshape(GC_rep,[],NT);   
+    [Dvalues{m, 1:M_-1, 1:NT}] = GC_rep{:};
+
+elseif gain.type=='FR'
+    FR_matrix2=kron(FR_matrix,eye(p));
+    new_gain=(gain1)*FR_matrix2;
+    GC=[];
+for i=1:M*NT
+      B*new_gain(1:r,1+(i-1)*p:p*i)*C;
+    GC=[GC B*new_gain(1:r,1+(i-1)*p:p*i)*C];
+end
+ 
+    block_rows = repmat(d, NT*(M),1);     % A vector with NT elements, each of value d
+    GC_rep = mat2cell(GC,d, block_rows);
+    GC_rep=reshape(GC_rep,[],NT);    
+    [Dvalues{m, 1:M_-1, 1:NT}] = GC_rep{:};
+
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+int;
+k=m; 
+  P{k}=zeros(d*(M_-1)*NT,d*M_*Kl+d*M_*NT);
+    for l=1:NT
+    for j=1:M_-1
+        cc=K_index(l,j,k);
+        p1=int(cc,1);
+        p2=int(cc,2);
+         for i=1:M_
+        P{k}((l-1)*d*(M_-1)+(j-1)*d+1:(l-1)*d*(M_-1)+j*d,d*M_*(cc-1)+ ...
+            (i-1)*d+1:d*M_*(cc-1)+d*i)=Dvalues{k,j,l}*chebT(2/(p2-p1)*(thetaR{l}(j)-tau{k}(thetaR{l}(j))-0.5*(p1+p2)),i-1);
+         
+         end
+    end
+    end
+
+    finalP=finalP-P{k};
+
+Bp(d*M_*Kl+d*NT+1:end,:)=(finalP);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% choosing how to solve the eigenvalue problem:
+Flag=0;
+if isfield(opts,'method')
+arg=opts.method;
+     if any(strcmp(arg,'eigs')) 
+Flag=1;
+     end
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if Flag==0 %% we use eig to solve the generalized eigenvalue problem
+Ap(M_*d*Kl+1:end,1:end)=Bp(M_*d*Kl+1:end,1:end);
+Bp(M_*d*Kl+1:end,1:end)=zeros(M_*NT*d,M_*(NT+Kl)*d);
+[V,D,W]=eig(Ap,Bp);
+d2=diag(D);
+d3=d2(abs(d2)~=inf);
+d_vec=d3;
+V2=V(:,abs(d2)~=inf);
+W2=W(:,abs(d2)~=inf);
+[g_val,ind]=sort(abs(d3),'descend');
+z=d3(ind(1));
+gg=d3(ind(1:end));
+RF=V2(:,ind(1));
+LF=W2(:,ind(1));
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+else
+As=sparse(Ap);
+Bs=sparse(Bp);
+opts.Tolerance=1e-10;
+opts.MaxIterations=2000;
+[Lv_prov,z_provL,condition1]=eigs(As',Bs',2,'LM',opts);
+z_provL=diag(z_provL);
+[Rv_prov,z_provR,condition2]=eigs(As,Bs,2,'LM',opts);
+z_provR=diag(z_provR);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if condition1==0 && condition2==0 %%% if all the chosen eigenvalues have converged
+% v_prov=Lv_prov(:,abs(z_provL)~=inf);
+z_provL=z_provL(abs(z_provL)~=inf);
+z_prov_slackL=z_provL;
+[~,L]=sort(abs(z_prov_slackL),'descend');
+z_provL=z_provL(L);
+Lv_prov=Lv_prov(:,L);
+zL=[]; Lv=[];
+for i=1:length(z_provL)
+    if imag(z_provL(i))<+1.e-6
+        zL=[zL conj(z_provL(i))];
+        Lv=[Lv Lv_prov(:,i)];    
+    else
+        zL=[zL z_provL(i)];
+        Lv=[Lv conj(Lv_prov(:,i))];
+    end
+end                 % In zL we store in decreasing order of magnitude the FMs with NEGATIVE imaginary part; in Lv we store the corresponding right eigenvectors (that 
+                    %  are the left of the original GEP). When an eigenvalue has positive real part, then we take its conjugate and the conjugate of its eigenvector
+
+
+Rv_prov=Rv_prov(:,abs(z_provR)~=inf);
+z_provR=z_provR(abs(z_provR)~=inf);
+z_prov_slackR=z_provR;
+[~,R]=sort(abs(z_prov_slackR),'descend');
+z_provR=z_provR(R);
+Rv_prov=Rv_prov(:,R);
+zR=[]; Rv=[];
+for i=1:length(z_provR)
+    if imag(z_provR(i))>-1.e-6
+        zR=[zR z_provR(i)];
+        Rv=[Rv Rv_prov(:,i)];
+    else
+        zR=[zR conj(z_provR(i))];
+        Rv=[Rv conj(Rv_prov(:,i))];
+    end
+end                 % In zR we store in decreasing order of magnitude the FMs with POSITIVE imaginary part; in Rv we store the corresponding right eigenvector
+                    % When an eigenvalue has negative real part, then we take its conjugate and the conjugate of its eigenvector
+
+
+z=[];RF=[];LF=[];
+i=1;
+while i<=length(zR)-1
+    if abs(zR(i)-zR(i+1))<1.e-6
+        z=[z;zR(i)];
+        RF=[RF Rv(:,i)];
+        LF=[LF Lv(:,i)];
+        i=i+2;
+    else
+        z=[z;zR(i)];
+        RF=[RF Rv(:,i)];
+        LF=[LF Lv(:,i)];
+        i=i+1;
+    end
+end                 % We finally gather the FMs with positive real part and its left and right eigenvectors, and we get rid of all the doubles.
+z=z(1);RF=RF(:,1);LF=LF(:,1);
+
+
+%% Finally we normalize the eigenvectors LF, RF so that they have unit norms and are such that real(LF'*Bp*RF)>0
+ll=1;
+    rv= RF(:,ll);
+    lv= LF(:,ll);
+    theta=angle(lv(1));
+    lv=exp(-1i*theta)*lv;
+    scal=lv'*Bp*rv;
+    LF(:,ll)=lv;
+    RF(:,ll)=rv*exp(-1i*angle(scal));
+%     SCAL(ll)=-real(LF(:,ll)'*Bp*RF(:,ll));    % watch out here: I put a minus sign in front because the collocation for TPDDE are now associated with matrix Bp, no longer Ap
+                                              % as a consequence the sign of the derivative of z wrt any parameter is opposite
+
+
+else %%% if the eigenvalues have not converged we have to switch to eig
+Flag=0;
+disp('had to switch to eig')
+Ap(M_*d*Kl+1:end,1:end)=Bp(M_*d*Kl+1:end,1:end);
+Bp(M_*d*Kl+1:end,1:end)=zeros(M_*NT*d,M_*(NT+Kl)*d);
+[V,D,W]=eig(Ap,Bp);
+d2=diag(D);
+d3=d2(abs(d2)~=inf);
+V2=V(:,abs(d2)~=inf);
+W2=W(:,abs(d2)~=inf);
+[~,ind]=sort(abs(d3),'descend');
+z=d3(ind(1));
+RF=V2(:,ind(1));
+LF=W2(:,ind(1));
+end
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+%% Calculation of Gradient:
+% %%%%%% comopute the graident
+denum=-LF'*(Bp)*RF;  %%% denominator
+LF_=LF((M_)*Kl*d+1+NT*d:end,1);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if (gain.type=='TC')
+sum1=0;
+for l=1:size(Matrix,1)/p
+    for s=1:size(Matrix,2)/d
+        
+sum1=sum1+(transpose(B)*conj(LF_((l-1)*d+1:(l-1)*d+ ...
+    d)))*(transpose(RF((s-1)*d+1:(s-1)*d+d))*transpose(Matrix((l-1)*p+1:l*p,(s-1)*d+1:s*d)));
+    end
+end
+num=sum1;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+elseif (gain.type=='FR')
+% sum1=0;
+ for rr=1:gain.n_FR
+ sum1=0;
+
+for l=1:size(Matrix,1)/p
+ eval_Fr=FR_matrix(rr,l);
+    for s=1:size(Matrix,2)/d
+        
+ sum1=sum1+kron((transpose(B)*conj(LF_((l-1)*d+ ...
+     1:(l-1)*d+d)))*(transpose(RF((s-1)*d+1:(s-1)*d+ ...
+     d))*transpose(Matrix((l-1)*p+1:l*p,(s-1)*d+1:s*d))),eval_Fr);
+    end
+end
+
+num(r*p*(rr-1)+1:r*p*(rr),1)=sum1(:);
+end
+
+
+num=reshape(num,r,[]);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+else %%% QR-type
+for l=1:size(Matrix,1)/p
+    sum1=0;
+    for s=1:size(Matrix,2)/d
+sum1=sum1+(transpose(B)*conj(LF_((l-1)*d+ ...
+    1:(l-1)*d+d)))*(transpose(RF((s-1)*d+1:(s-1)*d+d))*transpose(Matrix((l-1)*p+1:l*p,(s-1)*d+1:s*d)));
+    end   
+    grad(1:r,1+(l-1)*p:l*p)=sum1 ; 
+end
+ num=grad;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if Flag==0
+    g_z=-num./denum; %%% graident of the simple dominant eigenvalue
+  g_mz=(real(conj(z).*g_z))./abs(z); %%% graident of the modulus of the simple dominant eigenvalue
+else 
+gg=[];
+    g_z=z*num./denum; %%% graident of the simple dominant eigenvalue 
+    g_mz=(real(conj(z).*g_z))./abs(z); %%% graident of the modulus of the simple dominant eigenvalue
+end
+
+
+

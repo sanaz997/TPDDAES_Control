@@ -1,0 +1,289 @@
+ clc;clear all;close all;
+% addpath('main') 
+% addpath('slack')
+% M=20;
+% %%%% we want to apply a stabilizing PIR controller using a dynamic
+% %%%% controller representation developed in our paper. 
+% %%% system dynamics: 
+% % [A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+% % % M=20;
+% % % T=tau_A{2}(1)
+% 
+% 
+ R=1.5;C0=16.6*1e-6;Cs=5600*1e-6;L=37.5*1e-6;m=-1.2023;Vs=39.1309;U=0.3066;
+ V0=12;
+% %%% implementation of marco's system: 
+ kp=0.1;ki=1;kr=0.07;
+% E=eye(4,4)
+
+
+h=1.15183e-05	;
+Kp=0.100782;		Ki=1;Kr=0.0700044;	
+
+L  = 37.5e-6;
+Co = 16.6e-6;
+R  = 1.5;
+Cs = 0.0056;
+j  = sqrt(-1);
+
+I  = 84.8;
+mu = 0.46;
+E0 = 46.8; 
+Vo = 12;
+
+
+
+syms x
+x=linspace(0.1,50,1000000);
+F = (x-E0).*(I*R*x).^mu+x*(Vo^2).^mu;
+index=zci(F);
+
+Vs = 39.1309	
+IL = Vo/R;
+U  =0.306663
+Is = IL*U
+m  =-1.20233
+
+
+
+A0=[1/m/Cs -U/Cs Kp*V0/R/Cs -Ki*V0/R/Cs;
+    U/L 0 -1/L-Kp*Vs/L Ki*Vs/L;
+    0 1/C0 -1/R/C0 0;
+0 0 -1 0
+]
+A1=[0 0 -Kr*V0/R/Cs 0;
+    0 0 Kr*Vs/L 0;
+    0 0 0 0 ;
+    0 0 0 0]
+tau=h;
+rdde = tds_create({A0,A1},[0 tau]);
+%max_size_eigenvalue_problem
+%options = tds_roots_options('max_size_eigenvalue_problem',2000);
+cr = tds_roots(rdde,2);
+tds_eigenplot(cr);
+cr
+
+%%
+% %%
+% A0=[1/m/Cs -U/Cs 0 0 0;
+%     U/L 0 -1/L 0 0;
+%     0 1/C0 -1/R/C0 0 0;
+% 0 0 -1 0 0;
+% 0 0 0 0 
+% ]
+% 
+% A1=[0 0 0 0;
+%     0 0 0 0;
+%     0 0 0 0 ;
+%     0 0 0 0]
+% 
+% 
+% B=[-V0/R/Cs;Vs/L;0;0]
+% C=[0  -1 0 0 ;
+%      0 0  0 1]
+% 
+% B=[ -V0/R/Cs ;Vs/L;0;0]
+% syms Kp Ki Kr
+% K=[Kp Ki Kr]
+% 
+% plant=tds_create({A0,A1},[ 0 tau],{B},0,{[0 0 -1 0;0 0 0 1] [0 0 -1 0;0 0 0 0]},[0 tau]);
+% 
+% initial = zeros(1,5);
+% opt = tds_stabopt_options('nstart',1);
+% [Dc,cl] = tds_stabopt_static(plant,'options',opt);
+
+
+% sa=tds_sa(rdde,-100)
+% 
+%%
+% 
+% kp =   165.1291
+% 
+% 
+% ki =   0.4450
+% 
+% 
+% kr =   -6.2434
+%    h= 3.0000e-05
+M=45;
+   [A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+%   T=tau;
+h=1.15183e-05;
+tau_A{2}=@(t) h	;
+T=h;
+
+T=0.05 %%% the problem that you are not taking into account is that with the change of==
+  rddae=tpddae_create(A,B,C,E,tau_A,points_d,T);
+    KP=[0.1]; KI=[1];KR=[0.07];
+  gain.K=[Kp KI -KR] 
+   gain.type='TC'
+%   M=20
+
+points_d=[100*h 200*h 300*h 400*h]
+  [z,g_z,gg]=SR_computation3(rddae,M,'gain',gain);
+%   abs(exp(T*cr(2)))
+%   abs(z)
+
+  
+  %%
+
+% K=[KP KI KR];
+
+% 
+% R=null(E')
+% R'*B
+M=30
+Kp=0.1;Ki=1;Kr=0.07;
+X2=[Kp;Ki;Kr];
+%  [K_TC,z_TC2,time_TC]=tpddae_stabopt_static(rddae,M,'TC','initial',X2,'nstart',1,'normtol',1e-10);
+ [K_TC,z_TC2,time_TC]=tpddae_stabopt_static(rddae,M,'TC','nstart',10,'normtol',1e-7);
+%%%% h=11.5183*1e-5;
+         %%%%%% 350.730604288617          60795.4547790808          13.4569932525405
+h=tau_A{2}(1);
+X=K_TC.K;
+kp=X(1)
+ki=X(2)
+kr=X(3)
+h
+abs(z_TC2)
+%%
+M=45;
+[A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+%   T=tau;
+points_d=[];
+  rddae=tpddae_create(A,B,C,E,tau_A,points_d,T);
+ % h=tau_A{2}(1);
+  init=1.0e+06 *[   0.0294    1.1935   -0.0003   -0.0285   -1.0019    0.0003   -0.0069   -0.3070    0.0001]';
+init=1e6*ones(9,1);
+init=1.0e+06 *  [ 0.0685    2.0328    0.0029   -0.0252   -0.7593   -0.0013    0.0618    1.2319    0.0026]';
+kp=0.1;ki=1;kr=-0.07;
+init=[kp ki kr kp ki kr kp ki kr]'
+  [K_FR,z_FR,time_FR]=tpddae_stabopt_static(rddae,M,'FR','n_FR',3,'nstart',10,'normtol',1e-8);
+%%%% h=11.5183*1e-5;
+
+% gain1=[0.1 1 -0.07 0 0 0 0 0 0]
+gain1=[K_FR.K_1 K_FR.K_2 K_FR.K_3]
+%%
+ gain1 = 1.0e+06 *[ 5.8655    6.5884   -5.4410    5.4889    5.4845   -5.1070    1.9672    1.9023   -1.7982]
+%     
+ gain1=1.0e+06 *  [ 0.0685    2.0328    0.0029   -0.0252   -0.7593   -0.0013    0.0618    1.2319    0.0026]
+%%
+[A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+%   T=tau;
+h=tau_A{2}(1);
+K_FR.K=1.0e+06 *  [ 0.0685    2.0328    0.0029   -0.0252   -0.7593   -0.0013    0.0618    1.2319    0.0026]
+
+  rddae=tpddae_create(A,B,C,E,tau_A,points_d,T);
+K_FR.K_1=1.0e+06 *  [ 0.0685    2.0328 0.0029  ] 
+ K_FR.K_2 = 1.0e+06 * [ -0.0252   -0.7593   -0.0013  ]
+ 
+ K_FR.K_3=1.0e+06 *[0.0618    1.2319    0.0026]
+M=30;
+K_FR.n_FR=3;
+K_FR.T=h;
+K_FR.type='FR'
+ [z,g_z,gg]=SR_computation3(rddae,M,'gain',K_FR);
+ abs(z)
+
+ %%
+ %%
+ close all;
+ M=45
+[A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+%   T=tau;
+h=tau_A{2}(1);
+K_FR.K=1.0e+06 *  [ 0.0685    2.0328    0.0029   -0.0252   -0.7593   -0.0013    0.0618    1.2319    0.0026]
+
+  rddae=tpddae_create(A,B,C,E,tau_A,points_d,T);
+  init=[]
+  for i=1:M
+init=[init kp ki -kr]
+  end
+%   init=[]
+%   init=1e4*ones(25*3,1)
+% %   %%
+ %[K_QR,z_QR,time_QR,pars]=tpddae_stabopt_static(rddae,M,'QR','lambda1',1e-10,'nstart',1,'normtol',1e-4,'initial',init');
+
+  [K_QR,z_QR,time_QR,pars]=tpddae_stabopt_static(rddae,M,'QR','lambda1',5,'nstart',10);
+slack_mat=pars.slack_mat;
+intR=pars.slack.intR;
+% for i = 1:M
+%      fieldName = sprintf('K_%d', i);
+%    K_QR.(fieldName)=[ kp ki -kr]
+% 
+% end
+ cheb_vec=cheb_cof(slack_mat,K_QR);
+abs(z_QR)
+%%
+
+ 
+ %%%% h=11.5183*1e-5;
+
+
+% % 5gain1 =
+% % 
+%    1.0e+05 *
+% 
+%     0.7919    8.7795    0.0010   -0.4590    1.0887   -0.0006    0.6420   -3.1650    0.0008
+% 
+% 
+% 
+% gain1 =
+% 
+%    1.0e+06 *
+% 
+%     0.2448    2.4372   -0.0001    0.1813   -0.4295   -0.0001    0.1614    0.0910   -0.0001
+% kp =
+% % 
+% %    29.2600
+% 
+% 
+% ki =
+% 
+%    5.2268e+03
+% 
+% 
+% kr =
+% 
+%    -0.9483
+% 
+% 
+% ans =
+% 
+%     0.9955
+% 
+% h
+% 
+% h =
+% 
+%    3.3000e-05
+
+% [K_FR,z_FR2,time_FR]=tpddae_stabopt_static(rddae,M,'FR','n_FR',3,'nstart',10,'normtol',1e-10);
+% %  gain.type='TC';
+
+ % %  gain.type='TC';
+% %   [z,g_z,gg]=SR_computation3(rddae,M,'gain',gain);
+% % abs(z)
+% % abs(exp(T*cr(1)))
+% % % % pause();
+% % % clc
+% % %%
+% % 
+% %  [A,B,C,T,E,tau_A,points_d]=delayed_mathieu2();
+% %  tau_int=11*1e-6;
+% %  tau_A{2}=@(t) tau_int;
+% %  T=tau_int;
+% %  rddae=tpddae_create(A,B,C,E,tau_A,points_d,T);
+% % 
+% %  [K_TC,z_TC2,time_TC]=tpddae_stabopt_static(rddae,M,'TC','nstart',10,'normtol',1e-9);
+% % abs(z_TC2)
+% %  % %  %%%%%
+% % % % % 
+% % % % % 
+% % %  %%
+% % 
+% % %  [z,g_z,gg]=SR_computation3(rddae,M,'gain',gain);
+% % %  abs(z)
+
+
+

@@ -1,6 +1,6 @@
 ## TPDDAEs_Stabilization
 
-This MATLAB software package provides stability analysis and stabilization tools for linear time-periodic delay differential algebraic equations (TPDDAEs). The presented toolbox can deal with the time delay systems of the retarded type. These systems are assumed to be given in state-space form. In other words, we study the software toolbox accepts the systems of the form:
+This MATLAB software package provides stability analysis and stabilization tools for linear time-periodic delay differential algebraic equations (TPDDAEs). The presented toolbox can deal with the time delay systems of the retarded type. These systems are assumed to be given in state-space form. In other words, we study the software toolbox that accepts the systems of the form:
  
  $$
 \begin{equation}
@@ -78,9 +78,9 @@ This software uses HANSO to solve non-smooth, non-convex optimization problems a
 Interested in reading more and learning about the theory? You can currently refer to [3].
 
 ## How to cite?
-You can currently cite:
+You can cite:
 
-S. Akbarisisi, W. Michiels. **Controller design for systems governed by time-periodic delay differential equations: A spectrum optimization approach.** In Proceedings of the 63rd IEEE Conference on Decision and Control, 2024.
+Sanaz Akbarisisi, Wim Michiels, Spectrum-based stability analysis and stabilization of systems with time-periodic delay differential algebraic equations, European Journal of Control, Volume 86, Part B, 2025, 101400, ISSN 0947-3580, https://doi.org/10.1016/j.ejcon.2025.101400.
 
 ## Authors
 This software was written by Sanaz Akbarisisi under the supervision of Wim Michiels.
